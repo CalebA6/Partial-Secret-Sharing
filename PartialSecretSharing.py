@@ -5,8 +5,32 @@ from __future__ import print_function
 import random
 import functools
 
-# 12th Mersenne Prime
-_PRIME = 2 ** 127 - 1
+def isPrime(number): 
+	trial = 2
+	while (trial * trial) < number: 
+		if number % trial == 0: 
+			return False
+		trial += 1
+	return True
+
+MERCENNE_PRIME_POWERS = [2, 3, 5, 7, 13, 17, 19, 31, 61, 89, 107, 127, 521, 607, 1279, 2203, 2281, 3217, 4253, 4423, 9689, 9941, 11213, 19937, 21701, 23209, 44497, 86243, 110503, 132049, 216091, 756839, 859433, 1257787, 1398269, 2976221, 3021377, 6972593, 13466917, 20996011, 24036583, 25964951, 30402457, 32582657, 37156667, 42643801, 43112609, 57885161, 74207281, 77232917, 82589933, 136279841]
+
+def generatePrime(min): 
+	power = 2
+	while ((2 ** power) - 1) < min: 
+		if power in MERCENNE_PRIME_POWERS: 
+			newPowerIndex = MERCENNE_PRIME_POWERS.index(power) + 1
+			if newPowerIndex < len(MERCENNE_PRIME_POWERS): 
+				power = MERCENNE_PRIME_POWERS[newPowerIndex]
+			else: 
+				power += 1
+		else: 
+			power += 1
+	if power in MERCENNE_PRIME_POWERS: 
+		return (2 ** power) - 1
+	while not isPrime((2 ** power) - 1): 
+		power += 1
+	return (2 ** power) - 1
 
 _RINT = functools.partial(random.SystemRandom().randint, 0)
 
@@ -21,7 +45,7 @@ def _eval_at(poly, x, prime):
         accum %= prime
     return accum
 
-def make_random_shares(secret, minimum, shares, prime=_PRIME):
+def make_random_shares(secret, minimum, shares, prime):
     """
     Generates a random shamir pool for a given secret, returns share points.
     """
@@ -84,7 +108,7 @@ def _lagrange_interpolate(x, x_s, y_s, p):
                for i in range(k)])
     return (_divmod(num, den, p) + p) % p
 
-def recover_secret(shares, prime=_PRIME):
+def recover_secret(shares, prime):
     """
     Recover the secret from share points
     (points (x,y) on the polynomial).
@@ -174,11 +198,13 @@ def toReducedCode(value):
 def fromReducedCode(value): 
 	return fromCode(value, ALPHABET[:-1])
 
-def encodeShares(total, required, shares): 
+def encodeShares(total, required, shares, prime): 
+	primeStr = toCode(prime)
+	primePrefix = toReducedCode(len(primeStr)) + ALPHABET[-1] + primeStr
 	totalStr = toCode(total)
 	totalLen = len(totalStr)
 	totalPrefix = toReducedCode(totalLen) + ALPHABET[-1] + totalStr
-	prefix = totalPrefix + toCode(required, totalLen)
+	prefix = primePrefix + totalPrefix + toCode(required, totalLen)
 	encodedShares = []
 	for share in shares: 
 		encodedShares.append(prefix + toCode(share[0], totalLen) + toCode(share[1]))
@@ -187,18 +213,26 @@ def encodeShares(total, required, shares):
 def decodeShares(share): 
 	if words: 
 		share = share.split()
-	encodedTotalLen = []
+	encodedPrimeLen = []
 	index = 0
+	while share[index] != ALPHABET[-1]: 
+		encodedPrimeLen.append(share[index])
+		index += 1
+	primeLen = fromReducedCode(encodedPrimeLen)
+	primeLenPrefixLen = index + 1
+	prime = fromCode(share[primeLenPrefixLen:(primeLenPrefixLen + primeLen)])
+	index = primeLenPrefixLen + primeLen
+	encodedTotalLen = []
 	while share[index] != ALPHABET[-1]: 
 		encodedTotalLen.append(share[index])
 		index += 1
 	totalLen = fromReducedCode(encodedTotalLen)
-	totalLenPrefixLen = index + 1
-	total = fromCode(share[totalLenPrefixLen:(totalLenPrefixLen + totalLen)])
-	required = fromCode(share[(totalLenPrefixLen + totalLen):(totalLenPrefixLen + (2 * totalLen))])
-	shareNum = fromCode(share[(totalLenPrefixLen + (2 * totalLen)):(totalLenPrefixLen + (3 * totalLen))])
-	shareValue = fromCode(share[(totalLenPrefixLen + (3 * totalLen)):])
-	return ((total, required, shareNum, shareValue))
+	pretotalLen = index + 1
+	total = fromCode(share[pretotalLen:(pretotalLen + totalLen)])
+	required = fromCode(share[(pretotalLen + totalLen):(pretotalLen + (2 * totalLen))])
+	shareNum = fromCode(share[(pretotalLen + (2 * totalLen)):(pretotalLen + (3 * totalLen))])
+	shareValue = fromCode(share[(pretotalLen + (3 * totalLen)):])
+	return ((prime, total, required, shareNum, shareValue))
 
 def main():
 	"""Main function"""
@@ -226,8 +260,9 @@ def main():
 					print('Cannot require more parts than exist. ')
 				else: 
 					break
-			shares = make_random_shares(secretNum, minimum=required, shares=total)
-			shares = encodeShares(total, required, shares)
+			prime = generatePrime(max(secretNum, total))
+			shares = make_random_shares(secretNum, required, total, prime)
+			shares = encodeShares(total, required, shares, prime)
 
 			print('Partial Secrets:')
 			if shares:
@@ -241,7 +276,7 @@ def main():
 			parts = []
 			i = 1
 			while (requiredBySet is None) or (i <= requiredBySet): 
-				(total, required, num, share) = inputPart('Part: ')
+				(prime, total, required, num, share) = inputPart('Part: ')
 				if (totalInSet is None) and (requiredBySet is None): 
 					totalInSet = total
 					requiredBySet = required
@@ -250,7 +285,7 @@ def main():
 					continue
 				parts.append((num, share))
 				i += 1
-			secretNum = recover_secret(parts)
+			secretNum = recover_secret(parts, prime)
 			secretList = []
 			while secretNum > 0: 
 			    secretList.append(secretNum % 256)

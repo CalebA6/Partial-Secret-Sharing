@@ -274,12 +274,10 @@ def main():
 			for char in secret:
 				secretNum += char * power
 				power *= 256
+			total = inputNaturalNumber('Total Parts: ')
 			while True: 
 				required = inputNaturalNumber('Required Parts: ')
-				total = inputNaturalNumber('Total Parts: ')
-				if total >= 256: 
-					print('Software does not current support splitting secret into more than 255 parts. ') # TODO
-				elif total < required: 
+				if total < required: 
 					print('Cannot require more parts than exist. ')
 				else: 
 					break

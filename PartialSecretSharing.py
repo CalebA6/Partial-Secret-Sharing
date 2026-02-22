@@ -234,6 +234,29 @@ def decodeShares(share):
 	shareValue = fromCode(share[(pretotalLen + (3 * totalLen)):])
 	return ((prime, total, required, shareNum, shareValue))
 
+def breakSecret(secret, total, required, prime): 
+	shares = make_random_shares(secret, required, total, prime)
+	return encodeShares(total, required, shares, prime)
+
+def reconstuctSecret(source): 
+	# temp values until we get the real values from a share
+	requiredBySet = None
+	totalInSet = None
+
+	parts = []
+	i = 1
+	while (requiredBySet is None) or (i <= requiredBySet): 
+		(prime, total, required, num, share) = source.getPart()
+		if (totalInSet is None) and (requiredBySet is None): 
+			totalInSet = total
+			requiredBySet = required
+		elif (total != totalInSet) or (required != requiredBySet): 
+			source.reportError()
+			continue
+		parts.append((num, share))
+		i += 1
+	return recover_secret(parts, prime)
+
 def main():
 	"""Main function"""
 	print('Partial Secret Sharing')
@@ -261,31 +284,19 @@ def main():
 				else: 
 					break
 			prime = generatePrime(max(secretNum, total))
-			shares = make_random_shares(secretNum, required, total, prime)
-			shares = encodeShares(total, required, shares, prime)
+			shares = breakSecret(secretNum, total, required, prime)
 
 			print('Partial Secrets:')
 			if shares:
 				for share in shares:
 					print('  ', share)
 		elif action == '2': 
-			# temp values until we get the real values from a share
-			requiredBySet = None
-			totalInSet = None
-
-			parts = []
-			i = 1
-			while (requiredBySet is None) or (i <= requiredBySet): 
-				(prime, total, required, num, share) = inputPart('Part: ')
-				if (totalInSet is None) and (requiredBySet is None): 
-					totalInSet = total
-					requiredBySet = required
-				elif (total != totalInSet) or (required != requiredBySet): 
+			class Source: 
+				def getPart(self): 
+					return inputPart('Part: ')
+				def reportError(self): 
 					print('The previously entered part does not belong to the same set as the parts entered before it.')
-					continue
-				parts.append((num, share))
-				i += 1
-			secretNum = recover_secret(parts, prime)
+			secretNum = reconstuctSecret(Source())
 			secretList = []
 			while secretNum > 0: 
 				secretList.append(secretNum % 256)
